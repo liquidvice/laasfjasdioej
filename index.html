@@ -1,1 +1,224 @@
-# laasfjasdioej
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Alicia en el Laberinto</title>
+<style>
+  body {
+    background: #111;
+    color: white;
+    font-family: Arial, sans-serif;
+    text-align: center;
+    margin: 0;
+  }
+  canvas {
+    display: block;
+    margin: 20px auto;
+    background: black;
+    border: 3px solid white;
+  }
+  #hud {
+    margin-top: 10px;
+    font-size: 18px;
+  }
+  #timer {
+    position: absolute;
+    bottom: 10px;
+    right: 20px;
+    font-size: 16px;
+    color: yellow;
+  }
+  .flash {
+    animation: flashEffect 0.3s ease-in-out;
+  }
+  @keyframes flashEffect {
+    0% { filter: brightness(1) hue-rotate(0deg); }
+    50% { filter: brightness(2) hue-rotate(270deg); }
+    100% { filter: brightness(1) hue-rotate(0deg); }
+  }
+</style>
+</head>
+<body>
+<h1>Alicia en el Laberinto</h1>
+<div id="hud">Nivel: 1 | Puntaje: 0 | Mejor: 0</div>
+<canvas id="gameCanvas" width="600" height="600"></canvas>
+<div id="timer">Tiempo: 0s | Mejor: --</div>
+
+<script>
+const canvas = document.getElementById("gameCanvas");
+const ctx = canvas.getContext("2d");
+const hud = document.getElementById("hud");
+const timerDiv = document.getElementById("timer");
+
+let rows, cols, cellSize;
+let maze = [];
+let player = {x: 0, y: 0};
+let goal = {x: 0, y: 0};
+let cups = [];
+let score = 0;
+let bestScore = localStorage.getItem("bestScore") || 0;
+let currentLevel = 1;
+let startTime, elapsedTime = 0, timerInterval;
+let bestTime = localStorage.getItem("bestTime") || null;
+
+function startTimer(){
+  startTime = Date.now();
+  timerInterval = setInterval(()=>{
+    elapsedTime = Math.floor((Date.now()-startTime)/1000);
+    updateHUD();
+  },1000);
+}
+function stopTimer(){
+  clearInterval(timerInterval);
+}
+function updateHUD(){
+  hud.textContent = `Nivel: ${currentLevel} | Puntaje: ${score} | Mejor: ${bestScore}`;
+  let bestTimeText = bestTime ? bestTime+"s" : "--";
+  timerDiv.textContent = `Tiempo: ${elapsedTime}s | Mejor: ${bestTimeText}`;
+}
+
+function generateMaze(r, c){
+  let maze = Array.from({length:r},()=>Array(c).fill(1));
+  function carve(x,y){
+    let dirs=[[1,0],[-1,0],[0,1],[0,-1]];
+    dirs.sort(()=>Math.random()-0.5);
+    maze[y][x]=0;
+    for(let [dx,dy] of dirs){
+      let nx=x+dx*2, ny=y+dy*2;
+      if(ny>=0&&ny<r&&nx>=0&&nx<c&&maze[ny][nx]===1){
+        maze[y+dy][x+dx]=0;
+        carve(nx,ny);
+      }
+    }
+  }
+  carve(0,0);
+  return maze;
+}
+
+function placeGoalAndCups(){
+  goal = {x: cols-1, y: rows-1};
+  cups = [];
+  let cupCount = currentLevel+2;
+  while(cups.length<cupCount){
+    let cx=Math.floor(Math.random()*cols);
+    let cy=Math.floor(Math.random()*rows);
+    if(maze[cy][cx]===0 && !(cx===player.x&&cy===player.y) && !(cx===goal.x&&cy===goal.y)){
+      if(!cups.some(c=>c.x===cx&&c.y===cy)){
+        cups.push({x:cx,y:cy});
+      }
+    }
+  }
+}
+
+function initLevel(){
+  if(currentLevel>5){
+    stopTimer();
+    ctx.fillStyle="white";
+    ctx.fillRect(0,0,canvas.width,canvas.height);
+    ctx.fillStyle="black";
+    ctx.font="30px Arial";
+    ctx.fillText("¡Ganaste! Puntaje: "+score,50,200);
+    if(score>bestScore){
+      bestScore=score;
+      localStorage.setItem("bestScore",bestScore);
+    }
+    if(!bestTime || elapsedTime<bestTime){
+      bestTime=elapsedTime;
+      localStorage.setItem("bestTime",bestTime);
+    }
+    ctx.fillText("Mejor Puntaje: "+bestScore,50,250);
+    ctx.fillText("Mejor Tiempo: "+bestTime+"s",50,300);
+    return;
+  }
+
+  rows = 10 + currentLevel*2;
+  cols = 10 + currentLevel*2;
+  cellSize = Math.min(canvas.width/cols, canvas.height/rows);
+
+  maze = generateMaze(rows, cols);
+  player = {x:0,y:0};
+  placeGoalAndCups();
+  updateHUD();
+
+  if(currentLevel===1){
+    score=0;
+    elapsedTime=0;
+    startTimer();
+  }
+  draw();
+}
+
+function regenerateMazeKeepPositions(){
+  canvas.classList.add("flash");
+  setTimeout(()=>canvas.classList.remove("flash"),300);
+  maze = generateMaze(rows, cols);
+  maze[player.y][player.x]=0;
+  maze[goal.y][goal.x]=0;
+  let remaining=cups.length;
+  cups=[];
+  while(cups.length<remaining){
+    let cx=Math.floor(Math.random()*cols);
+    let cy=Math.floor(Math.random()*rows);
+    if(maze[cy][cx]===0 && !(cx===player.x&&cy===player.y) && !(cx===goal.x&&cy===goal.y)){
+      if(!cups.some(c=>c.x===cx&&c.y===cy)){
+        cups.push({x:cx,y:cy});
+      }
+    }
+  }
+}
+
+function draw(){
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  for(let y=0;y<rows;y++){
+    for(let x=0;x<cols;x++){
+      ctx.fillStyle=maze[y][x]===1?"#333":"#000";
+      ctx.fillRect(x*cellSize,y*cellSize,cellSize,cellSize);
+    }
+  }
+  ctx.fillStyle="lime";
+  ctx.fillRect(goal.x*cellSize,goal.y*cellSize,cellSize,cellSize);
+  ctx.fillStyle="gold";
+  for(let cup of cups){
+    ctx.beginPath();
+    ctx.arc(cup.x*cellSize+cellSize/2,cup.y*cellSize+cellSize/2,cellSize/3,0,2*Math.PI);
+    ctx.fill();
+  }
+  ctx.fillStyle="cyan";
+  ctx.fillRect(player.x*cellSize,player.y*cellSize,cellSize,cellSize);
+}
+
+document.addEventListener("keydown",e=>{
+  let dx=0,dy=0;
+  if(e.key==="ArrowUp")dy=-1;
+  if(e.key==="ArrowDown")dy=1;
+  if(e.key==="ArrowLeft")dx=-1;
+  if(e.key==="ArrowRight")dx=1;
+  let nx=player.x+dx, ny=player.y+dy;
+  if(nx>=0&&nx<cols&&ny>=0&&ny<rows&&maze[ny][nx]===0){
+    player.x=nx; player.y=ny;
+    for(let i=0;i<cups.length;i++){
+      if(cups[i].x===player.x&&cups[i].y===player.y){
+        cups.splice(i,1);
+        score+=10;
+        if(currentLevel>=4) regenerateMazeKeepPositions();
+        break;
+      }
+    }
+    if(player.x===goal.x&&player.y===goal.y){
+      if(cups.length===0){
+        currentLevel++;
+        initLevel();
+        return;
+      } else {
+        alert("¡Debes recoger todas las tazas antes de salir!");
+      }
+    }
+    draw();
+    updateHUD();
+  }
+});
+
+initLevel();
+</script>
+</body>
+</html>
